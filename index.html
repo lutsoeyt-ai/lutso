@@ -262,14 +262,14 @@
       s0: "NASIL ÇALIŞIR?", s1: "Kullanıcı adını gir", s1d: "Minecraft kullanıcı adını yaz, karakterin hazır olsun.",
       s2: "Karakterini oluştur", s2d: "Kıyafetini ve detayları kendi zevkine göre seç.",
       s3: "Figürünü keşfet", s3d: "Sana özel hazırlanan figürünü teslim al.",
-      t0: "Dene", t1: "Figürünü önizle", t2: "Minecraft kullanıcı adını yaz, figürünün önizlemesini gör.", t3: "GÖSTER", t4: "Minecraft kullanıcı adın", t5: "5 cm figür", t6: "3-16 karakter; harf, rakam veya _ kullan.", t7: "Önizleme:" },
+      t0: "Dene", t1: "Figürünü önizle", t2: "Minecraft kullanıcı adını yaz, figürünün önizlemesini gör.", t3: "GÖSTER", t4: "Minecraft kullanıcı adın", t5: "5 cm figür", t6: "3-16 karakter; harf, rakam veya _ kullan.", t7: "Önizleme:", t8: "Skin yükleniyor...", t9: "Skin bulunamadı. Kullanıcı adını kontrol et." },
     en: { title: "Custom Minecraft Figures", label: "English", cart: "My Cart",
       ht: "<span>CREATE YOUR</span><span>OWN <span class='accent'>FIGURE</span></span>",
       hd: "Turn your dream character into reality! Enter your Minecraft username, create your own character and discover your one-of-a-kind figure. Let your in-game identity find a home on your shelf.",
       s0: "HOW IT WORKS", s1: "Enter your username", s1d: "Type your Minecraft username and your character is ready.",
       s2: "Build your character", s2d: "Pick the outfit and details your way.",
       s3: "Discover your figure", s3d: "Receive the figure made just for you.",
-      t0: "Try it", t1: "Preview your figure", t2: "Type your Minecraft username and see a preview of your figure.", t3: "SHOW ME", t4: "Your Minecraft username", t5: "5 cm figure", t6: "Use 3-16 letters, numbers or _.", t7: "Preview:" }
+      t0: "Try it", t1: "Preview your figure", t2: "Type your Minecraft username and see a preview of your figure.", t3: "SHOW ME", t4: "Your Minecraft username", t5: "5 cm figure", t6: "Use 3-16 letters, numbers or _.", t7: "Preview:", t8: "Loading skin...", t9: "Skin not found. Check the username." }
   };
   var root = document.documentElement;
   var track = document.getElementById("track");
@@ -327,7 +327,7 @@
     p.style.transform = 'translate3d(' + px(x) + ',' + px(y) + ',0)';
     [['f', W, H, '', D / 2, 1], ['k', W, H, 'rotateY(180deg) ', D / 2, .85], ['r', D, H, 'rotateY(90deg) ', W / 2, .8], ['l', D, H, 'rotateY(-90deg) ', W / 2, .8], ['t', W, D, 'rotateX(90deg) ', H / 2, 1.15], ['m', W, D, 'rotateX(-90deg) ', H / 2, .6]].forEach(function (f) {
       var el = document.createElement('div');
-      el.className = 'face';
+      el.className = 'face'; el.dataset.f = f[0];
       el.style.width = px(f[1]); el.style.height = px(f[2]);
       el.style.left = px(-f[1] / 2); el.style.top = px(-f[2] / 2);
       el.style.transform = f[3] + 'translateZ(' + px(f[4]) + ')';
@@ -342,17 +342,60 @@
   part('legL', 4, 12, 4, -2, 10); part('legR', 4, 12, 4, 2, 10);
   function paint(c) { figEl.querySelectorAll('.part').forEach(function (p) { p.style.setProperty('--c', c[p.dataset.k]); }); }
   paint({ head: '#ecebe7', body: '#e9e7e3', armL: '#e6e4e0', armR: '#e6e4e0', legL: '#e2e0dc', legR: '#e2e0dc' });
+  function loadImg(u) { return new Promise(function (res, rej) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function () { res(im); }; im.onerror = rej; im.src = u; }); }
+  function timeout(p, ms) { return Promise.race([p, new Promise(function (_, rej) { setTimeout(rej, ms); })]); }
+  function fetchSkin(name) {
+    var direct = ['https://minotar.net/skin/', 'https://mc-heads.net/skin/'];
+    function tryDirect(i) {
+      if (i >= direct.length) return Promise.reject();
+      return timeout(loadImg(direct[i] + name), 8000).catch(function () { return tryDirect(i + 1); });
+    }
+    return timeout(fetch('https://playerdb.co/api/player/minecraft/' + name).then(function (r) { return r.json(); }), 8000).then(function (j) {
+      if (!j || !j.success || !j.data || !j.data.player) return 'nf';
+      var id = j.data.player.raw_id || String(j.data.player.id).replace(/-/g, '');
+      return timeout(loadImg('https://crafatar.com/skins/' + id), 8000).catch(function () { return tryDirect(0); });
+    }, function () { return tryDirect(0); });
+  }
+  function rects(ox, oy, W, H, D) {
+    return { t: [ox + D, oy, W, D], m: [ox + D + W, oy, W, D], l: [ox, oy + D, D, H], f: [ox + D, oy + D, W, H], r: [ox + D + W, oy + D, D, H], k: [ox + 2 * D + W, oy + D, W, H] };
+  }
+  var SPEC = {
+    head: { d: [8, 8, 8], b: [0, 0], o: [32, 0] },
+    body: { d: [8, 12, 4], b: [16, 16], o: [16, 32] },
+    armL: { d: [4, 12, 4], b: [40, 16], o: [40, 32] },
+    armR: { d: [4, 12, 4], b: [32, 48], o: [48, 48], mb: [40, 16], mo: [40, 32] },
+    legL: { d: [4, 12, 4], b: [0, 16], o: [0, 32] },
+    legR: { d: [4, 12, 4], b: [16, 48], o: [0, 48], mb: [0, 16], mo: [0, 32] }
+  };
+  function applySkin(img) {
+    var legacy = img.height < 64;
+    figEl.querySelectorAll('.part').forEach(function (p) {
+      var s = SPEC[p.dataset.k], mir = legacy && !!s.mb;
+      var b = mir ? s.mb : s.b, o = mir ? s.mo : s.o;
+      var rb = rects(b[0], b[1], s.d[0], s.d[1], s.d[2]), ro = rects(o[0], o[1], s.d[0], s.d[1], s.d[2]);
+      p.querySelectorAll('.face').forEach(function (fc) {
+        var k = fc.dataset.f, kk = k;
+        if (mir && k === 'r') kk = 'l'; else if (mir && k === 'l') kk = 'r';
+        var a = rb[kk], c = ro[kk], cv = document.createElement('canvas'), cx;
+        cv.width = a[2]; cv.height = a[3]; cx = cv.getContext('2d');
+        if (mir) { cx.translate(a[2], 0); cx.scale(-1, 1); }
+        cx.drawImage(img, a[0], a[1], a[2], a[3], 0, 0, a[2], a[3]);
+        if (c[1] + c[3] <= img.height) cx.drawImage(img, c[0], c[1], c[2], c[3], 0, 0, a[2], a[3]);
+        fc.innerHTML = '';
+        fc.style.background = 'url(' + cv.toDataURL() + ') center/100% 100% no-repeat';
+        fc.style.imageRendering = 'pixelated';
+      });
+    });
+  }
   function showFig() {
     var n = tryIn.value.trim();
     if (!/^\w{3,16}$/.test(n)) { tryMsg.textContent = dict[root.lang].t6; return; }
-    var h = 0;
-    for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
-    var skins = ['#f1c9a5', '#e0ac84', '#c68e62', '#8d5a3b', '#f6d7bd'];
-    var skin = skins[h % 5], hue = h % 360;
-    var shirt = 'hsl(' + hue + ',65%,52%)', pants = 'hsl(' + ((hue + 120 + (h >> 8) % 120) % 360) + ',45%,34%)';
-    var arm = ((h >> 4) % 2) ? shirt : skin;
-    paint({ head: skin, body: shirt, armL: arm, armR: arm, legL: pants, legR: pants });
-    tryMsg.textContent = dict[root.lang].t7 + ' ' + n;
+    tryMsg.textContent = dict[root.lang].t8;
+    fetchSkin(n).then(function (r) {
+      if (r === 'nf') { tryMsg.textContent = dict[root.lang].t9; return; }
+      applySkin(r);
+      tryMsg.textContent = dict[root.lang].t7 + ' ' + n;
+    }, function () { tryMsg.textContent = dict[root.lang].t9; });
   }
   tryBtn.addEventListener('click', showFig);
   tryIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') showFig(); });
