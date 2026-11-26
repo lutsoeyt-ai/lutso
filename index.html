@@ -342,7 +342,7 @@
   part('legL', 4, 12, 4, -2, 10); part('legR', 4, 12, 4, 2, 10);
   function paint(c) { figEl.querySelectorAll('.part').forEach(function (p) { p.style.setProperty('--c', c[p.dataset.k]); }); }
   paint({ head: '#ecebe7', body: '#e9e7e3', armL: '#e6e4e0', armR: '#e6e4e0', legL: '#e2e0dc', legR: '#e2e0dc' });
-  function loadImg(u) { return new Promise(function (res, rej) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function () { res(im); }; im.onerror = rej; im.src = u; }); }
+  function loadImg(u) { return new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = rej; im.src = u; }); }
   function timeout(p, ms) { return Promise.race([p, new Promise(function (_, rej) { setTimeout(rej, ms); })]); }
   function fetchSkin(name) {
     function chain(list) {
@@ -357,7 +357,7 @@
     return timeout(fetch('https://playerdb.co/api/player/minecraft/' + name).then(function (r) { return r.json(); }), 8000).then(function (j) {
       if (!j || !j.success || !j.data || !j.data.player) return 'nf';
       var p = j.data.player, id = p.raw_id || String(p.id).replace(/-/g, ''), list = [];
-      if (p.skin_texture) list.push(['mojang', p.skin_texture]);
+      if (p.skin_texture) list.push(['mojang', String(p.skin_texture).replace(/^http:/, 'https:')]);
       list.push(['mc-heads', 'https://mc-heads.net/skin/' + id], ['minotar', 'https://minotar.net/skin/' + id], ['crafatar', 'https://crafatar.com/skins/' + id]);
       return chain(list);
     }, function () { return chain([['mc-heads', 'https://mc-heads.net/skin/' + name], ['minotar', 'https://minotar.net/skin/' + name]]); });
@@ -374,22 +374,29 @@
     legR: { d: [4, 12, 4], b: [16, 48], o: [0, 48], mb: [0, 16], mo: [0, 32] }
   };
   function applySkin(img) {
-    var legacy = img.height < 64;
+    var k = img.width / 64, IW = img.width, IH = img.height, legacy = IH < IW;
+    var url = 'url("' + img.src + '")';
+    function layer(r) {
+      var x = r[0] * k, y = r[1] * k, w = r[2] * k, h = r[3] * k;
+      var px = IW === w ? 0 : x / (IW - w) * 100, py = IH === h ? 0 : y / (IH - h) * 100;
+      return url + ' ' + px + '% ' + py + '% / ' + (IW / w * 100) + '% ' + (IH / h * 100) + '% no-repeat';
+    }
     figEl.querySelectorAll('.part').forEach(function (p) {
       var s = SPEC[p.dataset.k], mir = legacy && !!s.mb;
       var b = mir ? s.mb : s.b, o = mir ? s.mo : s.o;
       var rb = rects(b[0], b[1], s.d[0], s.d[1], s.d[2]), ro = rects(o[0], o[1], s.d[0], s.d[1], s.d[2]);
       p.querySelectorAll('.face').forEach(function (fc) {
-        var k = fc.dataset.f, kk = k;
-        if (mir && k === 'r') kk = 'l'; else if (mir && k === 'l') kk = 'r';
-        var a = rb[kk], c = ro[kk], cv = document.createElement('canvas'), cx;
-        cv.width = a[2]; cv.height = a[3]; cx = cv.getContext('2d');
-        if (mir) { cx.translate(a[2], 0); cx.scale(-1, 1); }
-        cx.drawImage(img, a[0], a[1], a[2], a[3], 0, 0, a[2], a[3]);
-        if (c[1] + c[3] <= img.height) cx.drawImage(img, c[0], c[1], c[2], c[3], 0, 0, a[2], a[3]);
+        var kk = fc.dataset.f;
+        if (mir && kk === 'r') kk = 'l'; else if (mir && kk === 'l') kk = 'r';
+        var a = rb[kk], c = ro[kk], layers = [];
+        if ((c[1] + c[3]) * k <= IH) layers.push(layer(c));
+        layers.push(layer(a));
         fc.innerHTML = '';
-        fc.style.background = 'url(' + cv.toDataURL() + ') center/100% 100% no-repeat';
-        fc.style.imageRendering = 'pixelated';
+        fc.style.background = 'none';
+        var d = document.createElement('div');
+        d.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;image-rendering:pixelated;' + (mir ? 'transform:scaleX(-1);' : '');
+        d.style.background = layers.join(',');
+        fc.appendChild(d);
       });
     });
   }
