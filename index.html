@@ -345,16 +345,22 @@
   function loadImg(u) { return new Promise(function (res, rej) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function () { res(im); }; im.onerror = rej; im.src = u; }); }
   function timeout(p, ms) { return Promise.race([p, new Promise(function (_, rej) { setTimeout(rej, ms); })]); }
   function fetchSkin(name) {
-    var direct = ['https://minotar.net/skin/', 'https://mc-heads.net/skin/'];
-    function tryDirect(i) {
-      if (i >= direct.length) return Promise.reject();
-      return timeout(loadImg(direct[i] + name), 8000).catch(function () { return tryDirect(i + 1); });
+    function chain(list) {
+      var i = 0;
+      function next() {
+        if (i >= list.length) return Promise.reject();
+        var c = list[i++];
+        return timeout(loadImg(c[1]), 8000).then(function (im) { return { img: im, src: c[0] }; }, next);
+      }
+      return next();
     }
     return timeout(fetch('https://playerdb.co/api/player/minecraft/' + name).then(function (r) { return r.json(); }), 8000).then(function (j) {
       if (!j || !j.success || !j.data || !j.data.player) return 'nf';
-      var id = j.data.player.raw_id || String(j.data.player.id).replace(/-/g, '');
-      return timeout(loadImg('https://crafatar.com/skins/' + id), 8000).catch(function () { return tryDirect(0); });
-    }, function () { return tryDirect(0); });
+      var p = j.data.player, id = p.raw_id || String(p.id).replace(/-/g, ''), list = [];
+      if (p.skin_texture) list.push(['mojang', p.skin_texture]);
+      list.push(['mc-heads', 'https://mc-heads.net/skin/' + id], ['minotar', 'https://minotar.net/skin/' + id], ['crafatar', 'https://crafatar.com/skins/' + id]);
+      return chain(list);
+    }, function () { return chain([['mc-heads', 'https://mc-heads.net/skin/' + name], ['minotar', 'https://minotar.net/skin/' + name]]); });
   }
   function rects(ox, oy, W, H, D) {
     return { t: [ox + D, oy, W, D], m: [ox + D + W, oy, W, D], l: [ox, oy + D, D, H], f: [ox + D, oy + D, W, H], r: [ox + D + W, oy + D, D, H], k: [ox + 2 * D + W, oy + D, W, H] };
@@ -393,8 +399,8 @@
     tryMsg.textContent = dict[root.lang].t8;
     fetchSkin(n).then(function (r) {
       if (r === 'nf') { tryMsg.textContent = dict[root.lang].t9; return; }
-      applySkin(r);
-      tryMsg.textContent = dict[root.lang].t7 + ' ' + n;
+      applySkin(r.img);
+      tryMsg.textContent = dict[root.lang].t7 + ' ' + n + ' (' + r.src + ')';
     }, function () { tryMsg.textContent = dict[root.lang].t9; });
   }
   tryBtn.addEventListener('click', showFig);
